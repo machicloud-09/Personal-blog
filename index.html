@@ -58,6 +58,7 @@
   }
   a{ color:inherit; text-decoration:none; }
   img{ max-width:100%; display:block; }
+  #bg-canvas{ position:fixed; inset:0; width:100%; height:100%; z-index:-1; pointer-events:none; display:block; }
   ::selection{ background:var(--accent-soft); }
   a:focus-visible, button:focus-visible{ outline:2px solid var(--accent); outline-offset:3px; border-radius:3px; }
 
@@ -250,6 +251,7 @@
 </style>
 </head>
 <body>
+<canvas id="bg-canvas" aria-hidden="true"></canvas>
 
 <header class="nav">
   <div class="nav-inner">
@@ -609,6 +611,150 @@
     btn.setAttribute('aria-expanded', 'false');
     btn.textContent = '☰';
   }
+
+  (function(){
+    var canvas = document.getElementById('bg-canvas');
+    var ctx = canvas.getContext('2d');
+    var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var DOT_COUNT = 70;
+    var LINK_DIST = 130;
+    var MOUSE_LINK_DIST = 160;
+    var MOUSE_PUSH_DIST = 90;
+    var dots = [], w, h, dpr;
+    var mouse = { x: 0, y: 0, active: false };
+
+    function resize(){
+      dpr = window.devicePixelRatio || 1;
+      w = window.innerWidth;
+      h = window.innerHeight;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    function makeDots(){
+      dots = [];
+      for(var i = 0; i < DOT_COUNT; i++){
+        dots.push({
+          x: Math.random() * w,
+          y: Math.random() * h,
+          vx: (Math.random() - 0.5) * 0.25,
+          vy: (Math.random() - 0.5) * 0.25,
+          r: Math.random() * 1.6 + 0.8
+        });
+      }
+    }
+
+    function dotColor(){
+      var light = document.documentElement.getAttribute('data-theme') === 'light';
+      return light ? '181,101,29' : '245,166,35';
+    }
+
+    function draw(){
+      ctx.clearRect(0, 0, w, h);
+      var rgb = dotColor();
+
+      for(var i = 0; i < dots.length; i++){
+        var d = dots[i];
+        if(!reduceMotion){
+          if(mouse.active){
+            var mdx = d.x - mouse.x, mdy = d.y - mouse.y;
+            var mdist = Math.sqrt(mdx * mdx + mdy * mdy);
+            if(mdist < MOUSE_PUSH_DIST && mdist > 0.01){
+              var force = (1 - mdist / MOUSE_PUSH_DIST) * 0.6;
+              d.x += (mdx / mdist) * force;
+              d.y += (mdy / mdist) * force;
+            }
+          }
+          d.x += d.vx;
+          d.y += d.vy;
+        }
+        if(d.x < 0 || d.x > w) d.vx *= -1;
+        if(d.y < 0 || d.y > h) d.vy *= -1;
+        d.x = Math.max(0, Math.min(w, d.x));
+        d.y = Math.max(0, Math.min(h, d.y));
+      }
+
+      for(var i = 0; i < dots.length; i++){
+        for(var j = i + 1; j < dots.length; j++){
+          var a = dots[i], b = dots[j];
+          var dx = a.x - b.x, dy = a.y - b.y;
+          var dist = Math.sqrt(dx * dx + dy * dy);
+          if(dist < LINK_DIST){
+            ctx.strokeStyle = 'rgba(' + rgb + ',' + (0.14 * (1 - dist / LINK_DIST)) + ')';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.stroke();
+          }
+        }
+      }
+
+      if(mouse.active){
+        for(var i = 0; i < dots.length; i++){
+          var d = dots[i];
+          var dx = d.x - mouse.x, dy = d.y - mouse.y;
+          var dist = Math.sqrt(dx * dx + dy * dy);
+          if(dist < MOUSE_LINK_DIST){
+            ctx.strokeStyle = 'rgba(' + rgb + ',' + (0.35 * (1 - dist / MOUSE_LINK_DIST)) + ')';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(d.x, d.y);
+            ctx.lineTo(mouse.x, mouse.y);
+            ctx.stroke();
+          }
+        }
+        ctx.fillStyle = 'rgba(' + rgb + ',0.8)';
+        ctx.beginPath();
+        ctx.arc(mouse.x, mouse.y, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      for(var i = 0; i < dots.length; i++){
+        var d = dots[i];
+        ctx.fillStyle = 'rgba(' + rgb + ',0.55)';
+        ctx.beginPath();
+        ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      if(!reduceMotion) requestAnimationFrame(draw);
+    }
+
+    resize();
+    makeDots();
+    draw();
+
+    window.addEventListener('resize', function(){
+      resize();
+      makeDots();
+      if(reduceMotion) draw();
+    });
+
+    window.addEventListener('mousemove', function(e){
+      mouse.x = e.clientX;
+      mouse.y = e.clientY;
+      mouse.active = true;
+      if(reduceMotion) draw();
+    });
+    window.addEventListener('mouseleave', function(){
+      mouse.active = false;
+      if(reduceMotion) draw();
+    });
+    window.addEventListener('touchmove', function(e){
+      if(e.touches.length){
+        mouse.x = e.touches[0].clientX;
+        mouse.y = e.touches[0].clientY;
+        mouse.active = true;
+        if(reduceMotion) draw();
+      }
+    }, { passive: true });
+    window.addEventListener('touchend', function(){
+      mouse.active = false;
+      if(reduceMotion) draw();
+    });
+  })();
 </script>
 </body>
 </html>
